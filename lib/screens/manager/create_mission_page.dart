@@ -1,3 +1,4 @@
+// lib/screens/manager/create_mission_page.dart
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
@@ -10,157 +11,183 @@ class CreateMissionPage extends StatefulWidget {
 
 class _CreateMissionPageState extends State<CreateMissionPage> {
   final _formKey = GlobalKey<FormState>();
-  final _titreController = TextEditingController();
-  final _descriptionController = TextEditingController();
-  final _lieuController = TextEditingController();
-  DateTime? _dateDebut;
-  DateTime? _dateFin;
+  final _replacedFirstNameController = TextEditingController();
+  final _replacedLastNameController = TextEditingController();
+  final _justificationController = TextEditingController();
 
-  List services = [];
-  List categories = [];
-  List structures = [];
-  List metiers = [];
-  List motifs = [];
-  List statuts = [];
+  List<dynamic> structures = [];
+  List<dynamic> services = [];
+  List<dynamic> profils = [];
+  List<dynamic> motifs = [];
+  List<dynamic> types = [
+    {"id": "1", "label": "Vacation"},
+    {"id": "2", "label": "Heures supplémentaires"}
+  ];
+  List<dynamic> expressTypes = [
+    {"id": "false", "label": "Standard"},
+    {"id": "true", "label": "Express"}
+  ];
 
-  String? _selectedService;
-  String? _selectedCategorie;
   String? _selectedStructure;
-  String? _selectedMetier;
+  String? _selectedService;
+  String? _selectedProfil;
   String? _selectedMotif;
-  String? _selectedStatut;
+  String? _selectedType;
+  String? _isExpress;
 
-  bool _isSubmitting = false;
+  DateTime? _startDate;
+  DateTime? _finishDate;
+  TimeOfDay? _startTime;
+  TimeOfDay? _finishTime;
+
+  bool _isLoading = false;
   String? _message;
+  String? _referenceNumber;
 
   @override
   void initState() {
     super.initState();
-    fetchDropdowns();
+    fetchDropdownData();
+    generateReferenceNumber();
   }
 
-  Future<void> fetchDropdowns() async {
-    try {
-      final resServices = await http.get(Uri.parse('https://www.parbasante.com/api/services-list/'));
-      final resCategories = await http.get(Uri.parse('https://www.parbasante.com/api/missions-category-list/'));
-      final resStructures = await http.get(Uri.parse('https://www.parbasante.com/api/structures-list/'));
-      final resMetiers = await http.get(Uri.parse('https://www.parbasante.com/api/metier-category-list/'));
-      final resMotifs = await http.get(Uri.parse('https://www.parbasante.com/api/motifs-list/'));
-      final resStatuts = await http.get(Uri.parse('https://www.parbasante.com/api/statuts-category-list/'));
+  Future<void> fetchDropdownData() async {
+    final res1 = await http.get(Uri.parse('https://www.parbasante.com/api/structures-list/'));
+    final res2 = await http.get(Uri.parse('https://www.parbasante.com/api/services-list/'));
+    final res3 = await http.get(Uri.parse('https://www.parbasante.com/api/metier-category-list/'));
+    final res4 = await http.get(Uri.parse('https://www.parbasante.com/api/motifs-list/'));
 
-      if (resServices.statusCode == 200 &&
-          resCategories.statusCode == 200 &&
-          resStructures.statusCode == 200 &&
-          resMetiers.statusCode == 200 &&
-          resMotifs.statusCode == 200 &&
-          resStatuts.statusCode == 200) {
-        setState(() {
-          services = jsonDecode(resServices.body);
-          categories = jsonDecode(resCategories.body);
-          structures = jsonDecode(resStructures.body);
-          metiers = jsonDecode(resMetiers.body);
-          motifs = jsonDecode(resMotifs.body);
-          statuts = jsonDecode(resStatuts.body);
-        });
-      } else {
-        setState(() {
-          _message = "Erreur de chargement des données.";
-        });
-      }
-    } catch (e) {
+    if (res1.statusCode == 200 && res2.statusCode == 200 && res3.statusCode == 200 && res4.statusCode == 200) {
       setState(() {
-        _message = "Erreur de chargement : $e";
+        structures = jsonDecode(res1.body);
+        services = jsonDecode(res2.body);
+        profils = jsonDecode(res3.body);
+        motifs = jsonDecode(res4.body);
+      });
+    }
+  }
+
+  Future<void> generateReferenceNumber() async {
+    final now = DateTime.now();
+    final dateStr = "${now.year}${_twoDigits(now.month)}${_twoDigits(now.day)}";
+    final prefs = await SharedPreferences.getInstance();
+    final managerId = prefs.getInt('userId') ?? 100;
+    final token = prefs.getString('token');
+
+    final res = await http.get(
+      Uri.parse('https://www.parbasante.com/api/manager/$managerId/missions-created/'),
+      headers: {'Authorization': 'Token $token'},
+    );
+
+    if (res.statusCode == 200) {
+      final List data = jsonDecode(res.body);
+      int countToday = data.where((m) => (m['referenceNumber'] ?? "").toString().contains("REF$dateStr")).length;
+      setState(() {
+        _referenceNumber = "REF${dateStr}_${(countToday + 1).toString().padLeft(3, '0')}";
+      });
+    } else {
+      setState(() {
+        _referenceNumber = "REF${dateStr}_001";
+      });
+    }
+  }
+
+  String _twoDigits(int n) => n.toString().padLeft(2, '0');
+
+  Future<void> pickDate(bool isStart) async {
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: DateTime.now(),
+      firstDate: DateTime(2024),
+      lastDate: DateTime(2026),
+    );
+    if (picked != null) {
+      setState(() {
+        if (isStart) _startDate = picked;
+        else _finishDate = picked;
+      });
+    }
+  }
+
+  Future<void> pickTime(bool isStart) async {
+    final picked = await showTimePicker(
+      context: context,
+      initialTime: TimeOfDay.now(),
+    );
+    if (picked != null) {
+      setState(() {
+        if (isStart) _startTime = picked;
+        else _finishTime = picked;
       });
     }
   }
 
   Future<void> createMission() async {
     if (!_formKey.currentState!.validate()) return;
-    if (_dateDebut == null || _dateFin == null) {
-      setState(() => _message = "Veuillez choisir les dates.");
-      return;
-    }
-
-    setState(() {
-      _isSubmitting = true;
-      _message = null;
-    });
 
     SharedPreferences prefs = await SharedPreferences.getInstance();
     final token = prefs.getString('token');
+    final managerId = prefs.getInt('userId');
+
+    if (token == null || managerId == null || _referenceNumber == null) {
+      setState(() => _message = "Token, ID ou référence manquants");
+      return;
+    }
 
     final body = {
-      'titre': _titreController.text,
-      'description': _descriptionController.text,
-      'lieu': _lieuController.text,
-      'date_debut': _dateDebut!.toIso8601String(),
-      'date_fin': _dateFin!.toIso8601String(),
-      'service': _selectedService,
-      'categorie': _selectedCategorie,
-      'structure': _selectedStructure,
-      'metier': _selectedMetier,
-      'motif': _selectedMotif,
-      'statut': _selectedStatut,
+      "referenceNumber": _referenceNumber,
+      "type": _selectedType,
+      "isExpress": _isExpress,
+      "structure": _selectedStructure,
+      "service": _selectedService,
+      "startDate": _startDate?.toIso8601String().split("T").first,
+      "finishDate": _finishDate?.toIso8601String().split("T").first,
+      "startTime": _startTime?.format(context),
+      "finishTime": _finishTime?.format(context),
+      "replacedFirstName": _replacedFirstNameController.text.trim(),
+      "replacedLastName": _replacedLastNameController.text.trim(),
+      "justification": _justificationController.text.trim(),
+      "profil": _selectedProfil,
+      "motif": _selectedMotif,
+      "administrator": managerId
     };
+
+    setState(() => _isLoading = true);
 
     final res = await http.post(
       Uri.parse('https://www.parbasante.com/api/mission/create/'),
       headers: {
-        'Authorization': 'Token $token',
         'Content-Type': 'application/json',
+        'Authorization': 'Token $token',
       },
       body: jsonEncode(body),
     );
 
-    setState(() => _isSubmitting = false);
+    setState(() => _isLoading = false);
 
-    if (res.statusCode == 201 || res.statusCode == 200) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("✅ Mission créée avec succès !")),
-      );
+    if (res.statusCode == 200 || res.statusCode == 201) {
       Navigator.pop(context);
     } else {
-      final err = jsonDecode(res.body);
-      setState(() => _message = err['detail'] ?? "❌ Erreur lors de la création.");
+      setState(() => _message = 'Erreur: ${res.body}');
     }
   }
 
-  Future<void> pickDate(BuildContext context, bool isStart) async {
-    final now = DateTime.now();
-    final picked = await showDatePicker(
-      context: context,
-      initialDate: now,
-      firstDate: now.subtract(Duration(days: 1)),
-      lastDate: now.add(Duration(days: 365)),
-    );
-    if (picked != null) {
-      setState(() {
-        if (isStart) _dateDebut = picked;
-        else _dateFin = picked;
-      });
-    }
-  }
-
-  Widget buildDropdown({
-    required String label,
-    required List data,
-    required String? selectedValue,
-    required Function(String?) onChanged,
-    required String keyName,
-  }) {
-    return DropdownButtonFormField<String>(
-      decoration: InputDecoration(labelText: label),
-      value: selectedValue,
-      items: data
-          .where((e) => e[keyName] != null)
-          .map<DropdownMenuItem<String>>((e) {
-        return DropdownMenuItem(
-          value: e['id'].toString(),
-          child: Text(e[keyName] ?? 'Inconnu'),
-        );
-      }).toList(),
-      onChanged: onChanged,
-      validator: (val) => val == null ? "Requis" : null,
+  Widget buildDropdown(String label, List<dynamic> items, String? selected, Function(String?) onChanged, String nameKey) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8.0),
+      child: DropdownButtonFormField<String>(
+        isExpanded: true,
+        decoration: InputDecoration(labelText: label),
+        value: selected,
+        items: items.map<DropdownMenuItem<String>>((e) {
+          return DropdownMenuItem<String>(
+            value: e['id'].toString(),
+            child: Text(e[nameKey] ?? e['nom'] ?? e['name'] ?? 'Inconnu'),
+          );
+        }).toList(),
+        onChanged: onChanged,
+        validator: (val) => val == null ? "Champ requis" : null,
+      ),
     );
   }
 
@@ -168,102 +195,77 @@ class _CreateMissionPageState extends State<CreateMissionPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: Text("Créer une mission")),
-      body: SingleChildScrollView(
-        padding: EdgeInsets.all(20),
+      body: Padding(
+        padding: const EdgeInsets.all(16.0),
         child: Form(
           key: _formKey,
-          child: Column(children: [
-            TextFormField(
-              controller: _titreController,
-              decoration: InputDecoration(labelText: "Titre"),
-              validator: (val) => val!.isEmpty ? "Champ requis" : null,
-            ),
-            TextFormField(
-              controller: _descriptionController,
-              decoration: InputDecoration(labelText: "Description"),
-              maxLines: 3,
-              validator: (val) => val!.isEmpty ? "Champ requis" : null,
-            ),
-            TextFormField(
-              controller: _lieuController,
-              decoration: InputDecoration(labelText: "Lieu"),
-              validator: (val) => val!.isEmpty ? "Champ requis" : null,
-            ),
-            SizedBox(height: 10),
-            Row(
-              children: [
-                Expanded(
-                  child: ElevatedButton(
-                    onPressed: () => pickDate(context, true),
-                    child: Text(_dateDebut == null
-                        ? "Date début"
-                        : "Début : ${_dateDebut!.toLocal().toString().split(' ')[0]}"),
+          child: ListView(
+            children: [
+              if (_referenceNumber != null)
+                Text("Réf. mission : $_referenceNumber", style: TextStyle(fontWeight: FontWeight.bold)),
+              buildDropdown("Type (Vacation / Heures Supplémentaires)", types, _selectedType, (val) => setState(() => _selectedType = val), 'label'),
+              buildDropdown("Type de mission (Standard / Express)", expressTypes, _isExpress, (val) => setState(() => _isExpress = val), 'label'),
+              buildDropdown("Structure", structures, _selectedStructure, (val) => setState(() => _selectedStructure = val), 'name'),
+              buildDropdown("Service", services, _selectedService, (val) => setState(() => _selectedService = val), 'name'),
+              buildDropdown("Profil", profils, _selectedProfil, (val) => setState(() => _selectedProfil = val), 'name'),
+              buildDropdown("Motif", motifs, _selectedMotif, (val) => setState(() => _selectedMotif = val), 'nom'),
+              TextFormField(
+                controller: _replacedFirstNameController,
+                decoration: InputDecoration(labelText: "Prénom de la personne à remplacer"),
+                validator: (v) => v!.isEmpty ? "Champ requis" : null,
+              ),
+              TextFormField(
+                controller: _replacedLastNameController,
+                decoration: InputDecoration(labelText: "Nom de la personne à remplacer"),
+                validator: (v) => v!.isEmpty ? "Champ requis" : null,
+              ),
+              TextFormField(
+                controller: _justificationController,
+                decoration: InputDecoration(labelText: "Justification"),
+                maxLines: 2,
+              ),
+              Row(
+                children: [
+                  Expanded(
+                    child: ElevatedButton(
+                      onPressed: () => pickDate(true),
+                      child: Text(_startDate == null ? "Date début" : _startDate!.toString().split(" ")[0]),
+                    ),
                   ),
-                ),
-                SizedBox(width: 10),
-                Expanded(
-                  child: ElevatedButton(
-                    onPressed: () => pickDate(context, false),
-                    child: Text(_dateFin == null
-                        ? "Date fin"
-                        : "Fin : ${_dateFin!.toLocal().toString().split(' ')[0]}"),
+                  SizedBox(width: 8),
+                  Expanded(
+                    child: ElevatedButton(
+                      onPressed: () => pickDate(false),
+                      child: Text(_finishDate == null ? "Date fin" : _finishDate!.toString().split(" ")[0]),
+                    ),
                   ),
-                ),
-              ],
-            ),
-            SizedBox(height: 15),
-            buildDropdown(
-              label: "Service",
-              data: services,
-              selectedValue: _selectedService,
-              onChanged: (val) => setState(() => _selectedService = val),
-              keyName: 'nom',
-            ),
-            buildDropdown(
-              label: "Catégorie",
-              data: categories,
-              selectedValue: _selectedCategorie,
-              onChanged: (val) => setState(() => _selectedCategorie = val),
-              keyName: 'nom',
-            ),
-            buildDropdown(
-              label: "Structure",
-              data: structures,
-              selectedValue: _selectedStructure,
-              onChanged: (val) => setState(() => _selectedStructure = val),
-              keyName: 'nom',
-            ),
-            buildDropdown(
-              label: "Profil (métier)",
-              data: metiers,
-              selectedValue: _selectedMetier,
-              onChanged: (val) => setState(() => _selectedMetier = val),
-              keyName: 'nom',
-            ),
-            buildDropdown(
-              label: "Motif d’absence",
-              data: motifs,
-              selectedValue: _selectedMotif,
-              onChanged: (val) => setState(() => _selectedMotif = val),
-              keyName: 'nom',
-            ),
-            buildDropdown(
-              label: "Statut de l’agent",
-              data: statuts,
-              selectedValue: _selectedStatut,
-              onChanged: (val) => setState(() => _selectedStatut = val),
-              keyName: 'nom',
-            ),
-            SizedBox(height: 20),
-            if (_message != null)
-              Text(_message!, style: TextStyle(color: Colors.red)),
-            ElevatedButton(
-              onPressed: _isSubmitting ? null : createMission,
-              child: _isSubmitting
-                  ? CircularProgressIndicator(color: Colors.white)
-                  : Text("Créer la mission"),
-            ),
-          ]),
+                ],
+              ),
+              Row(
+                children: [
+                  Expanded(
+                    child: ElevatedButton(
+                      onPressed: () => pickTime(true),
+                      child: Text(_startTime == null ? "Heure début" : _startTime!.format(context)),
+                    ),
+                  ),
+                  SizedBox(width: 8),
+                  Expanded(
+                    child: ElevatedButton(
+                      onPressed: () => pickTime(false),
+                      child: Text(_finishTime == null ? "Heure fin" : _finishTime!.format(context)),
+                    ),
+                  ),
+                ],
+              ),
+              SizedBox(height: 20),
+              if (_message != null) Text(_message!, style: TextStyle(color: Colors.red)),
+              ElevatedButton(
+                onPressed: _isLoading ? null : createMission,
+                child: _isLoading ? CircularProgressIndicator() : Text("Créer la mission"),
+              ),
+            ],
+          ),
         ),
       ),
     );

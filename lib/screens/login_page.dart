@@ -130,18 +130,18 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
         print('ROLE RESPONSE: $roleData');
 
         final role = roleData['role'];
-        
-        // Pour l'instant, utiliser l'ID 140 (d'après Postman)
-        final userId = 140;
+        final userId = roleData['id'] ?? 140; // fallback 140 si non présent
         final prefs = await SharedPreferences.getInstance();
         await prefs.setInt('userId', userId);
+        await prefs.setString('role', role);
         print('✅ userId enregistré: $userId');
+        print('✅ role enregistré: $role');
 
         // Redirection selon rôle
         if (role == 'worker' || role == 'remplacant') {
           Navigator.pushReplacementNamed(context, '/home');
         } else if (role == 'manager') {
-          Navigator.pushReplacementNamed(context, '/manager_main');
+          Navigator.pushReplacementNamed(context, '/manager_home_page');
         } else if (role == 'admin') {
           Navigator.pushReplacementNamed(context, '/admin_main');
         } else if (role == 'drh') {

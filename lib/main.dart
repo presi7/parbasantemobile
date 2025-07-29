@@ -9,6 +9,7 @@ import 'package:parbasantemobile/screens/manager/manager_home_page.dart';
 import 'package:parbasantemobile/screens/manager/mission_detail_page_manager.dart';
 import 'package:parbasantemobile/screens/manager/profile_manager_page.dart';
 import 'package:parbasantemobile/screens/manager/reseau_page.dart';
+import 'package:parbasantemobile/screens/manager/toutes_les_missions_page.dart';
 import 'package:parbasantemobile/screens/register_page.dart';
 import 'screens/login_page.dart';
 import 'screens/home_page.dart';
@@ -44,6 +45,7 @@ class ParbaSanteApp extends StatelessWidget {
         '/admin_main': (context) => AdminMainPage(),
         '/create_structure': (context) => CreateStructurePage(),
         '/structure_list_page': (context) => StructureListPage(),
+        '/toutes_les_missions': (context) => ToutesLesMissionsPage(),
       },
       onGenerateRoute: (settings) {
         if (settings.name == '/mission_detail_page_manager') {
