@@ -71,14 +71,14 @@ class _WorkerDetailPageState extends State<WorkerDetailPage> {
             Text("👩‍⚕️ Métier : ${_worker?['metiers']?['name'] ?? 'N/A'}"),
             Text("📌 Statut : ${_worker?['statut']?['name'] ?? 'N/A'}"),
             SizedBox(height: 20),
-            if (_worker?['cv'] != null)
-              ElevatedButton(
-                child: Text("📄 Voir CV"),
-                onPressed: () {
-                  final url = "https://www.parbasante.com${_worker!['cv']}";
-                  // Tu peux intégrer url_launcher ici
-                },
-              )
+            // if (_worker?['cv'] != null)
+            //   ElevatedButton(
+            //     child: Text("📄 Voir CV"),
+            //     onPressed: () {
+            //       final url = "https://www.parbasante.com${_worker!['cv']}";
+            //       // Tu peux intégrer url_launcher ici
+            //     },
+            //   )
           ],
         ),
       ),

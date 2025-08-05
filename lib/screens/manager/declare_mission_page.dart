@@ -1,8 +1,8 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:intl/intl.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class DeclareMissionPage extends StatefulWidget {
   @override
@@ -14,180 +14,156 @@ class _DeclareMissionPageState extends State<DeclareMissionPage> {
   bool _isSubmitting = false;
   String? _error;
 
-  // Contrôleurs texte
-  TextEditingController justificationController = TextEditingController();
-  TextEditingController replacedFirstNameController = TextEditingController();
-  TextEditingController replacedLastNameController = TextEditingController();
+  // contrôleurs de texte
+  final TextEditingController _justifCtrl    = TextEditingController();
+  final TextEditingController _firstNameCtrl = TextEditingController();
+  final TextEditingController _lastNameCtrl  = TextEditingController();
 
-  // Dates/Heures
-  DateTime? selectedStartDate;
-  DateTime? selectedEndDate;
-  TimeOfDay? selectedStartTime;
-  TimeOfDay? selectedEndTime;
+  // dates / heures
+  DateTime?  _startDate;
+  DateTime?  _endDate;
+  TimeOfDay? _startTime;
+  TimeOfDay? _endTime;
 
-  // Dropdown data
-  List<dynamic> structures = [];
-  List<dynamic> services = [];
-  List<dynamic> profils = [];
-  List<dynamic> motifs = [];
-  List<dynamic> workers = [];
+  // listes pour dropdowns
+  List<dynamic> _types       = [];
+  List<dynamic> _structures  = [];
+  List<dynamic> _services    = [];
+  List<dynamic> _profils     = [];
+  List<dynamic> _motifs      = [];
+  List<dynamic> _workers     = [];
 
-  // Sélections
-  String? selectedType;
-  int? selectedStructure;
-  int? selectedService;
-  int? selectedProfil;
-  int? selectedMotif;
-  int? selectedWorker;
-
-  final List<String> typeOptions = ['Vacation', 'Heures supplémentaires'];
+  // valeurs sélectionnées
+  int? _selectedType;
+  int? _selectedStructure;
+  int? _selectedService;
+  int? _selectedProfil;
+  int? _selectedMotif;
+  int? _selectedWorker;
 
   @override
   void initState() {
     super.initState();
-    fetchData();
+    _loadDropdowns();
   }
 
-  Future<void> fetchData() async {
+  Future<void> _loadDropdowns() async {
     final prefs = await SharedPreferences.getInstance();
-    final token = prefs.getString('token');
+    final token = prefs.getString('token') ?? '';
 
-    try {
-      final urls = {
-        'structures': 'https://www.parbasante.com/api/structures-list/',
-        'services': 'https://www.parbasante.com/api/services-list/',
-        'profils': 'https://www.parbasante.com/api/metier-category-list/',
-        'motifs': 'https://www.parbasante.com/api/motifs-list/',
-        'workers': 'https://www.parbasante.com/api/workers-list/',
-      };
+    // on charge toutes les listes nécessaires
+    final results = await Future.wait([
+      http.get(Uri.parse('https://www.parbasante.com/api/missions-category-list/')),
+      http.get(Uri.parse('https://www.parbasante.com/api/structures-list/')),
+      http.get(Uri.parse('https://www.parbasante.com/api/services-list/')),
+      http.get(Uri.parse('https://www.parbasante.com/api/metier-category-list/')),
+      http.get(Uri.parse('https://www.parbasante.com/api/motifs-list/')),
+      http.get(
+        Uri.parse('https://www.parbasante.com/api/workers-list/'),
+        headers: {'Authorization': 'Token $token'},
+      ),
+    ]);
 
-      final responses = await Future.wait([
-        http.get(Uri.parse(urls['structures']!)),
-        http.get(Uri.parse(urls['services']!)),
-        http.get(Uri.parse(urls['profils']!)),
-        http.get(Uri.parse(urls['motifs']!)),
-        http.get(Uri.parse(urls['workers']!)),
-      ]);
-
-      if (responses.every((res) => res.statusCode == 200)) {
-        setState(() {
-          structures = jsonDecode(responses[0].body);
-          services = jsonDecode(responses[1].body);
-          profils = jsonDecode(responses[2].body);
-          motifs = jsonDecode(responses[3].body);
-          workers = jsonDecode(responses[4].body);
-        });
-      } else {
-        setState(() {
-          _error = 'Erreur chargement données';
-        });
-      }
-    } catch (e) {
+    if (results.every((r) => r.statusCode == 200)) {
       setState(() {
-        _error = "Erreur chargement données : $e";
+        _types      = jsonDecode(results[0].body);
+        _structures = jsonDecode(results[1].body);
+        _services   = jsonDecode(results[2].body);
+        _profils    = jsonDecode(results[3].body);
+        _motifs     = jsonDecode(results[4].body);
+        _workers    = jsonDecode(results[5].body);
+      });
+    } else {
+      setState(() {
+        _error = "Erreur de chargement des listes";
       });
     }
   }
 
-  Future<void> pickDate(BuildContext context, bool isStart) async {
-    final date = await showDatePicker(
+  Future<void> _pickDate(bool isStart) async {
+    final d = await showDatePicker(
       context: context,
       initialDate: DateTime.now(),
       firstDate: DateTime(2024),
       lastDate: DateTime(2030),
     );
-    if (date != null) {
+    if (d != null) {
       setState(() {
-        if (isStart) {
-          selectedStartDate = date;
-        } else {
-          selectedEndDate = date;
-        }
+        if (isStart) _startDate = d;
+        else         _endDate   = d;
       });
     }
   }
 
-  Future<void> pickTime(BuildContext context, bool isStart) async {
-    final time = await showTimePicker(
+  Future<void> _pickTime(bool isStart) async {
+    final t = await showTimePicker(
       context: context,
       initialTime: TimeOfDay.now(),
     );
-    if (time != null) {
+    if (t != null) {
       setState(() {
-        if (isStart) {
-          selectedStartTime = time;
-        } else {
-          selectedEndTime = time;
-        }
+        if (isStart) _startTime = t;
+        else         _endTime   = t;
       });
     }
   }
 
-  String formatDate(DateTime? date) {
-    if (date == null) return '';
-    return DateFormat('yyyy-MM-dd').format(date);
+  String _fmtDate(DateTime? d) {
+    if (d == null) return '';
+    return DateFormat('yyyy-MM-dd').format(d);
   }
 
-  String formatTime(TimeOfDay? time) {
-    if (time == null) return '';
+  String _fmtTime(TimeOfDay? t) {
+    if (t == null) return '';
     final now = DateTime.now();
-    final dt = DateTime(now.year, now.month, now.day, time.hour, time.minute);
-    return DateFormat('HH:mm').format(dt);
+    final dt  = DateTime(now.year, now.month, now.day, t.hour, t.minute);
+    return DateFormat('HH:mm:ss').format(dt);
   }
 
-  Future<void> submitMission() async {
+  Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
+    setState(() => _isSubmitting = true);
 
-    final prefs = await SharedPreferences.getInstance();
-    final token = prefs.getString('token');
+    final prefs     = await SharedPreferences.getInstance();
+    final token     = prefs.getString('token') ?? '';
+    final managerId = prefs.getInt('userId');
 
-    setState(() {
-      _isSubmitting = true;
-    });
+    final body = {
+      'type':              _selectedType,
+      'structure':         _selectedStructure,
+      'service':           _selectedService,
+      'profil':            _selectedProfil,
+      'startDate':         _fmtDate(_startDate),
+      'finishDate':        _fmtDate(_endDate),
+      'startTime':         _fmtTime(_startTime),
+      'finishTime':        _fmtTime(_endTime),
+      'motif':             _selectedMotif,
+      'justification':     _justifCtrl.text.trim(),
+      'replacedFirstName': _firstNameCtrl.text.trim(),
+      'replacedLastName':  _lastNameCtrl.text.trim(),
+      'worker':            _selectedWorker,
+      'administrator':     managerId,
+    };
 
-    try {
-      final response = await http.post(
-        Uri.parse('https://www.parbasante.com/api/mission/declare/'),
-        headers: {
-          'Authorization': 'Token $token',
-          'Content-Type': 'application/json',
-        },
-        body: jsonEncode({
-          'structure': selectedStructure,
-          'service': selectedService,
-          'profil': selectedProfil,
-          'type': selectedType,
-          'startDate': formatDate(selectedStartDate),
-          'finishDate': formatDate(selectedEndDate),
-          'startTime': formatTime(selectedStartTime),
-          'finishTime': formatTime(selectedEndTime),
-          'motif': selectedMotif,
-          'justification': justificationController.text,
-          'replacedFirstName': replacedFirstNameController.text,
-          'replacedLastName': replacedLastNameController.text,
-          'worker': selectedWorker,
-        }),
-      );
+    final res = await http.post(
+      Uri.parse('https://www.parbasante.com/api/mission/declare/'),
+      headers: {
+        'Authorization': 'Token $token',
+        'Content-Type':  'application/json',
+      },
+      body: jsonEncode(body),
+    );
 
-      if (response.statusCode == 201 || response.statusCode == 200) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('✅ Mission déclarée avec succès.')),
-        );
-        _formKey.currentState!.reset();
-      } else {
-        setState(() {
-          _error = 'Erreur API : ${response.statusCode}';
-        });
-      }
-    } catch (e) {
+    setState(() => _isSubmitting = false);
+
+    if (res.statusCode == 200 || res.statusCode == 201) {
+      final newMission = jsonDecode(res.body);
+      Navigator.of(context).pop(newMission); // ← on renvoie tout l’objet
+    } else {
       setState(() {
-        _error = 'Erreur envoi : $e';
+        _error = 'Erreur API ${res.statusCode}';
       });
     }
-
-    setState(() {
-      _isSubmitting = false;
-    });
   }
 
   @override
@@ -195,147 +171,179 @@ class _DeclareMissionPageState extends State<DeclareMissionPage> {
     return Scaffold(
       appBar: AppBar(title: Text('Déclarer une mission')),
       body: Padding(
-        padding: const EdgeInsets.all(16.0),
+        padding: EdgeInsets.all(16),
         child: Form(
           key: _formKey,
           child: ListView(
             children: [
-              if (_error != null) Text(_error!, style: TextStyle(color: Colors.red)),
-              DropdownButtonFormField<String>(
-                value: selectedType,
-                items: typeOptions
-                    .map((t) => DropdownMenuItem(value: t, child: Text(t)))
-                    .toList(),
-                onChanged: (val) => setState(() => selectedType = val),
+              if (_error != null)
+                Text(_error!, style: TextStyle(color: Colors.red)),
+
+              // Type
+              DropdownButtonFormField<int>(
                 decoration: InputDecoration(labelText: 'Type de mission'),
-                validator: (val) => val == null ? 'Champ requis' : null,
-              ),
-              DropdownButtonFormField<int>(
                 isExpanded: true,
-                value: selectedStructure,
-                items: structures
-                    .where((s) => s['id'] != null && s['name'] != null)
-                    .map<DropdownMenuItem<int>>((s) => DropdownMenuItem<int>(
-                          value: s['id'],
-                          child: Text(s['name']),
-                        ))
+                value: _selectedType,
+                items: _types.cast<Map<String,dynamic>>()
+                    .map((t) => DropdownMenuItem<int>(
+                  value: t['id'] as int?,
+                  child: Text(t['name'] as String? ?? '–'),
+                ))
+                    .where((i) => i.value != null)
                     .toList(),
-                onChanged: (val) => setState(() => selectedStructure = val),
+                onChanged: (v) => setState(() => _selectedType = v),
+                validator: (v) => v == null ? 'Champ requis' : null,
+              ),
+
+              // Structure
+              DropdownButtonFormField<int>(
                 decoration: InputDecoration(labelText: 'Structure'),
-                validator: (val) => val == null ? 'Champ requis' : null,
-              ),
-              DropdownButtonFormField<int>(
                 isExpanded: true,
-                value: selectedService,
-                items: services
-                    .where((s) => s['id'] != null && s['name'] != null)
-                    .map<DropdownMenuItem<int>>((s) => DropdownMenuItem<int>(
-                          value: s['id'],
-                          child: Text(s['name']),
-                        ))
+                value: _selectedStructure,
+                items: _structures.cast<Map<String,dynamic>>()
+                    .map((s) => DropdownMenuItem<int>(
+                  value: s['id'] as int?,
+                  child: Text(s['name'] as String? ?? '–'),
+                ))
+                    .where((i) => i.value != null)
                     .toList(),
-                onChanged: (val) => setState(() => selectedService = val),
+                onChanged: (v) => setState(() => _selectedStructure = v),
+                validator: (v) => v == null ? 'Champ requis' : null,
+              ),
+
+              // Service
+              DropdownButtonFormField<int>(
                 decoration: InputDecoration(labelText: 'Service'),
-                validator: (val) => val == null ? 'Champ requis' : null,
-              ),
-              DropdownButtonFormField<int>(
                 isExpanded: true,
-                value: selectedProfil,
-                items: profils
-                    .where((p) => p['id'] != null && (p['name'] != null || p['nom'] != null))
-                    .map<DropdownMenuItem<int>>((p) => DropdownMenuItem<int>(
-                          value: p['id'],
-                          child: Text(p['name'] ?? p['nom']),
-                        ))
+                value: _selectedService,
+                items: _services.cast<Map<String,dynamic>>()
+                    .map((s) => DropdownMenuItem<int>(
+                  value: s['id'] as int?,
+                  child: Text(s['name'] as String? ?? '–'),
+                ))
+                    .where((i) => i.value != null)
                     .toList(),
-                onChanged: (val) => setState(() => selectedProfil = val),
+                onChanged: (v) => setState(() => _selectedService = v),
+                validator: (v) => v == null ? 'Champ requis' : null,
+              ),
+
+              // Profil
+              DropdownButtonFormField<int>(
                 decoration: InputDecoration(labelText: 'Profil'),
-                validator: (val) => val == null ? 'Champ requis' : null,
-              ),
-              Row(
-                children: [
-                  Expanded(
-                    child: ElevatedButton(
-                      onPressed: () => pickDate(context, true),
-                      child: Text("Date début"),
-                    ),
-                  ),
-                  SizedBox(width: 10),
-                  Expanded(
-                    child: ElevatedButton(
-                      onPressed: () => pickDate(context, false),
-                      child: Text("Date fin"),
-                    ),
-                  ),
-                ],
-              ),
-              Row(
-                children: [
-                  Expanded(
-                    child: ElevatedButton(
-                      onPressed: () => pickTime(context, true),
-                      child: Text("Heure début"),
-                    ),
-                  ),
-                  SizedBox(width: 10),
-                  Expanded(
-                    child: ElevatedButton(
-                      onPressed: () => pickTime(context, false),
-                      child: Text("Heure fin"),
-                    ),
-                  ),
-                ],
-              ),
-              DropdownButtonFormField<int>(
                 isExpanded: true,
-                value: selectedMotif,
-                items: motifs
-                    .where((m) => m['id'] != null && m['name'] != null)
-                    .map<DropdownMenuItem<int>>((m) => DropdownMenuItem<int>(
-                          value: m['id'],
-                          child: Text(m['name']),
-                        ))
+                value: _selectedProfil,
+                items: _profils.cast<Map<String,dynamic>>()
+                    .map((p) {
+                  final name = (p['name'] as String?) ?? (p['nom'] as String?) ?? '–';
+                  return DropdownMenuItem<int>(
+                    value: p['id'] as int?,
+                    child: Text(name),
+                  );
+                })
+                    .where((i) => i.value != null)
                     .toList(),
-                onChanged: (val) => setState(() => selectedMotif = val),
-                decoration: InputDecoration(labelText: 'Motif'),
-                validator: (val) => val == null ? 'Champ requis' : null,
+                onChanged: (v) => setState(() => _selectedProfil = v),
+                validator: (v) => v == null ? 'Champ requis' : null,
               ),
+
+              // Dates / heures
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: () => _pickDate(true),
+                      child: Text(_startDate == null ? 'Date début' : _fmtDate(_startDate)),
+                    ),
+                  ),
+                  SizedBox(width: 8),
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: () => _pickDate(false),
+                      child: Text(_endDate == null ? 'Date fin'    : _fmtDate(_endDate)),
+                    ),
+                  ),
+                ],
+              ),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: () => _pickTime(true),
+                      child: Text(_startTime == null ? 'Heure début' : _fmtTime(_startTime)),
+                    ),
+                  ),
+                  SizedBox(width: 8),
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: () => _pickTime(false),
+                      child: Text(_endTime == null ? 'Heure fin'    : _fmtTime(_endTime)),
+                    ),
+                  ),
+                ],
+              ),
+
+              // Motif
+              DropdownButtonFormField<int>(
+                decoration: InputDecoration(labelText: 'Motif'),
+                isExpanded: true,
+                value: _selectedMotif,
+                items: _motifs.cast<Map<String,dynamic>>()
+                    .map((m) => DropdownMenuItem<int>(
+                  value: m['id'] as int?,
+                  child: Text(m['name'] as String? ?? '–'),
+                ))
+                    .where((i) => i.value != null)
+                    .toList(),
+                onChanged: (v) => setState(() => _selectedMotif = v),
+                validator: (v) => v == null ? 'Champ requis' : null,
+              ),
+
+              // Justification
               TextFormField(
-                controller: justificationController,
+                controller: _justifCtrl,
                 decoration: InputDecoration(labelText: 'Justification'),
               ),
+
+              // Remplaçant
               DropdownButtonFormField<int>(
-                isExpanded: true,
-                value: selectedWorker,
-                items: workers
-                    .where((w) => w['user'] != null && w['user']['id'] != null)
-                    .map<DropdownMenuItem<int>>((w) {
-                      final user = w['user'];
-                      final fullName = user['username'] ??
-                          '${user['first_name'] ?? ''} ${user['last_name'] ?? ''}'.trim();
-                      return DropdownMenuItem<int>(
-                        value: user['id'],
-                        child: Text(fullName.isNotEmpty ? fullName : 'Remplaçant'),
-                      );
-                    }).toList(),
-                onChanged: (val) => setState(() => selectedWorker = val),
                 decoration: InputDecoration(labelText: 'Remplaçant'),
-                validator: (val) => val == null ? 'Champ requis' : null,
+                isExpanded: true,
+                value: _selectedWorker,
+                items: _workers.cast<Map<String,dynamic>>()
+                    .map((w) {
+                  final u = w['user'] as Map<String,dynamic>? ?? {};
+                  final id = u['id'] as int?;
+                  final username = u['username'] as String? ?? '';
+                  final first    = u['first_name'] as String? ?? '';
+                  final last     = u['last_name'] as String? ?? '';
+                  final name     = username.isNotEmpty ? username : '$first $last'.trim();
+                  return DropdownMenuItem<int>(
+                    value: id,
+                    child: Text(name.isNotEmpty ? name : '–'),
+                  );
+                })
+                    .where((i) => i.value != null)
+                    .toList(),
+                onChanged: (v) => setState(() => _selectedWorker = v),
+                validator: (v) => v == null ? 'Champ requis' : null,
               ),
+
+              // Remplacé
               TextFormField(
-                controller: replacedFirstNameController,
+                controller: _firstNameCtrl,
                 decoration: InputDecoration(labelText: 'Prénom remplacé'),
               ),
               TextFormField(
-                controller: replacedLastNameController,
+                controller: _lastNameCtrl,
                 decoration: InputDecoration(labelText: 'Nom remplacé'),
               ),
+
               SizedBox(height: 20),
               ElevatedButton(
-                onPressed: _isSubmitting ? null : submitMission,
+                onPressed: _isSubmitting ? null : _submit,
                 child: _isSubmitting
                     ? CircularProgressIndicator(color: Colors.white)
-                    : Text("Déclarer la mission"),
+                    : Text('Déclarer la mission'),
               ),
             ],
           ),
