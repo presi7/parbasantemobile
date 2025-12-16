@@ -55,22 +55,39 @@ class _RegisterPageState extends State<RegisterPage> {
   }
 
   Future<void> fetchDropdownData() async {
-    final statutsUrl = Uri.parse('https://www.parbasante.com/api/statuts-category-list/');
-    final metiersUrl = Uri.parse('https://www.parbasante.com/api/metier-category-list/');
-    final servicesUrl = Uri.parse('https://www.parbasante.com/api/services-list/');
-    final structuresUrl = Uri.parse('https://www.parbasante.com/api/structures-list/');
+    try {
+      final statutsUrl = Uri.parse('https://www.parbasante.com/api/statuts-category-list/');
+      final metiersUrl = Uri.parse('https://www.parbasante.com/api/metier-category-list/');
+      final servicesUrl = Uri.parse('https://www.parbasante.com/api/services-list/');
+      final structuresUrl = Uri.parse('https://www.parbasante.com/api/structures-list/');
 
-    final statutsRes = await http.get(statutsUrl);
-    final metiersRes = await http.get(metiersUrl);
-    final servicesRes = await http.get(servicesUrl);
-    final structuresRes = await http.get(structuresUrl);
+      final statutsRes = await http.get(statutsUrl);
+      final metiersRes = await http.get(metiersUrl);
+      final servicesRes = await http.get(servicesUrl);
+      final structuresRes = await http.get(structuresUrl);
 
-    setState(() {
-      statuts = jsonDecode(statutsRes.body);
-      metiers = jsonDecode(metiersRes.body);
-      services = jsonDecode(servicesRes.body);
-      structures = jsonDecode(structuresRes.body);
-    });
+      if (statutsRes.statusCode == 200 &&
+          metiersRes.statusCode == 200 &&
+          servicesRes.statusCode == 200 &&
+          structuresRes.statusCode == 200) {
+        setState(() {
+          statuts = jsonDecode(statutsRes.body);
+          metiers = jsonDecode(metiersRes.body);
+          services = jsonDecode(servicesRes.body);
+          structures = jsonDecode(structuresRes.body);
+        });
+      } else {
+        // On évite un crash en cas de réponse non‑JSON (HTML d’erreur, etc.)
+        setState(() {
+          _message = "Impossible de charger les listes (code réseau ${statutsRes.statusCode}/${metiersRes.statusCode}/${servicesRes.statusCode}/${structuresRes.statusCode}). Vérifiez votre connexion.";
+        });
+      }
+    } catch (e) {
+      // Si la requête échoue (pas d’Internet, certificat, etc.), on évite le crash
+      setState(() {
+        _message = "Erreur lors du chargement des listes : $e";
+      });
+    }
   }
 
   Future<void> registerUser() async {
